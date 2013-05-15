@@ -20,17 +20,17 @@ void ProcessFrame(uint8 *pInputImg)
 	int nc = OSC_CAM_MAX_IMAGE_WIDTH/2;
 	int siz = sizeof(data.u8TempImage[GRAYSCALE]);
 
-	int Shift = 7;
-	short Beta = 2;//the meaning is that in floating point the value of Beta is = 6/(1 << Shift) = 6/128 = 0.0469
-	uint8 MaxForeground = 120;//the maximum foreground counter value (at 15 fps this corresponds to less than 10s)
-
 	struct OSC_PICTURE Pic1, Pic2;//we require these structures to use Oscar functions
 	struct OSC_VIS_REGIONS ImgRegions;//these contain the foreground objects
 
 	//Variables used for OSTU algorithm
-	int ki, kd;
-	uint16 omega0, omega1, my0, my1;
+	int k,i;
+	uint32 omega0, omega1, my0, my1;
 	uint32 hist[256];
+	float sigma[256], temp_sigma, o0w0, o1w1;
+	uint8 otsu_thres;
+	memset(hist, 0 , sizeof(hist));
+	memset(sigma, 0 , sizeof(sigma));
 
 	if(data.ipc.state.nStepCounter == 1)
 	{
@@ -42,15 +42,66 @@ void ProcessFrame(uint8 *pInputImg)
 	}
 	else
 	{
+		otsu_thres = 0;
+		temp_sigma = 0;
 		/* this is the default case */
 		for(r = 0; r < siz; r+= nc)/* we strongly rely on the fact that them images have the same size */
 		{
 			for(c = 0; c < nc; c++)
 			{
-				data.u8TempImage[THRESHOLD][r +c ] = data.u8TempImage[GRAYSCALE][r + c] > data.ipc.state.nThreshold ? 0 : 0xFF;
+				//calc histogram
+				hist[(int) data.u8TempImage[GRAYSCALE]]++;
 			}
 		}
 
+		omega0 = omega1 = my0 = my1 = 0;
+		//calc otsu
+		for(k = 0; k < 256; k++){
+			for(i = 0; i <= k ; i++){
+				omega0 += hist[i];
+				my0 += hist[i] * i;
+			}
+			for(i = k+1 ; i < 256 ; i++){
+				omega1 += hist[i];
+				my1 += hist[i] * i;
+			}
+
+			if(omega0 != 0){
+				o0w0 = (float) my0 / omega0;
+			}
+			else{
+				o0w0 = (float) my0;
+			}
+			if(omega1 != 0){
+				o1w1 = (float) my1 / omega1;
+			}
+			else{
+				o1w1 = (float) my1;
+			}
+			sigma[k] = o0w0 - o1w1;
+			sigma[k] *= sigma[k];
+			sigma[k] *= (omega0 * omega1);
+			//sigma[k] = sigma[k] * (o0w0 - o1w1) / 19777216 * omega0 * omega1;
+
+			if(sigma[k] > temp_sigma){
+				temp_sigma = sigma[k];
+				otsu_thres = k;
+				//otsu_thres = (uint8) ((((uint16) k) *100)/255);
+			}
+		}
+
+		for(r = 0; r < siz; r+= nc)/* we strongly rely on the fact that them images have the same size */
+		{
+			for(c = 0; c < nc; c++)
+			{
+				data.u8TempImage[THRESHOLD][r +c ] = data.u8TempImage[GRAYSCALE][r + c] > otsu_thres ? 0 : 0xFF;
+				//plot otsu_thres
+				data.u8TempImage[GRAYSCALE][otsu_thres] = 0;
+				data.u8TempImage[GRAYSCALE][otsu_thres+1] = 0xFF;
+				data.u8TempImage[GRAYSCALE][otsu_thres+2] = 0;
+
+			}
+		}
 		/*
 		{
 			//for debugging purposes we log the background values to console out
