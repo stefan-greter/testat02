@@ -27,10 +27,43 @@ void ProcessFrame(uint8 *pInputImg)
 	int k,i;
 	uint32 omega0, omega1, my0, my1;
 	uint32 hist[256];
-	float sigma[256], temp_sigma, o0w0, o1w1;
+	float sigma, max_sigma, temp;
 	uint8 otsu_thres;
 	memset(hist, 0 , sizeof(hist));
-	memset(sigma, 0 , sizeof(sigma));
+
+	otsu_thres = 0;
+	max_sigma = 0;
+	/* this is the default case */
+	for(r = 0; r < siz; r+= nc)/* we strongly rely on the fact that them images have the same size */
+	{
+		for(c = 0; c < nc; c++)
+		{
+			//calc histogram
+			hist[(int) data.u8TempImage[GRAYSCALE]]++;
+		}
+	}
+
+	omega0 = omega1 = my0 = my1 = 0;
+	//calc otsu
+	for(k = 0; k < 256; k++){
+		for(i = 0; i <= k ; i++){
+			omega0 += hist[i];
+			my0 += hist[i] * i;
+		}
+		for(i = k+1 ; i < 256 ; i++){
+			omega1 += hist[i];
+			my1 += hist[i] * i;
+		}
+
+		temp = (my0 / omega0 - my1 / omega1 ) * (my0 / omega0 - my1 / omega1 );
+		sigma = omega0 * omega1 * temp;
+
+		if(sigma > max_sigma){
+			max_sigma = sigma;
+			//otsu_thres = k;
+			otsu_thres = (uint8) ((((uint16) k) *100)/255);
+		}
+	}
 
 	if(data.ipc.state.nStepCounter == 1)
 	{
@@ -42,54 +75,6 @@ void ProcessFrame(uint8 *pInputImg)
 	}
 	else
 	{
-		otsu_thres = 0;
-		temp_sigma = 0;
-		/* this is the default case */
-		for(r = 0; r < siz; r+= nc)/* we strongly rely on the fact that them images have the same size */
-		{
-			for(c = 0; c < nc; c++)
-			{
-				//calc histogram
-				hist[(int) data.u8TempImage[GRAYSCALE]]++;
-			}
-		}
-
-		omega0 = omega1 = my0 = my1 = 0;
-		//calc otsu
-		for(k = 0; k < 256; k++){
-			for(i = 0; i <= k ; i++){
-				omega0 += hist[i];
-				my0 += hist[i] * i;
-			}
-			for(i = k+1 ; i < 256 ; i++){
-				omega1 += hist[i];
-				my1 += hist[i] * i;
-			}
-
-			if(omega0 != 0){
-				o0w0 = (float) my0 / omega0;
-			}
-			else{
-				o0w0 = (float) my0;
-			}
-			if(omega1 != 0){
-				o1w1 = (float) my1 / omega1;
-			}
-			else{
-				o1w1 = (float) my1;
-			}
-			sigma[k] = o0w0 - o1w1;
-			sigma[k] *= sigma[k];
-			sigma[k] *= (omega0 * omega1);
-			//sigma[k] = sigma[k] * (o0w0 - o1w1) / 19777216 * omega0 * omega1;
-
-			if(sigma[k] > temp_sigma){
-				temp_sigma = sigma[k];
-				otsu_thres = k;
-				//otsu_thres = (uint8) ((((uint16) k) *100)/255);
-			}
-		}
-
 		for(r = 0; r < siz; r+= nc)/* we strongly rely on the fact that them images have the same size */
 		{
 			for(c = 0; c < nc; c++)
@@ -99,7 +84,6 @@ void ProcessFrame(uint8 *pInputImg)
 				data.u8TempImage[GRAYSCALE][otsu_thres] = 0;
 				data.u8TempImage[GRAYSCALE][otsu_thres+1] = 0xFF;
 				data.u8TempImage[GRAYSCALE][otsu_thres+2] = 0;
-
 			}
 		}
 		/*
