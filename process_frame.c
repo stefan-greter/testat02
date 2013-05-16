@@ -11,6 +11,7 @@
 #include "template.h"
 #include <string.h>
 #include <stdlib.h>
+#define DEBUG 1				//1 = Debug mode enabled (Threshold shown in first row of GRAYSCALE picture)
 
 OSC_ERR OscVisDrawBoundingBoxBW(struct OSC_PICTURE *picIn, struct OSC_VIS_REGIONS *regions, uint8 Color);
 
@@ -27,25 +28,29 @@ void ProcessFrame(uint8 *pInputImg)
 	int k,i;
 	uint32 omega0, omega1, my0, my1;
 	uint32 hist[256];
-	float sigma, max_sigma, temp;
+	float sigma, max_sigma;
 	uint8 otsu_thres;
 	memset(hist, 0 , sizeof(hist));
 
-	otsu_thres = 0;
-	max_sigma = 0;
-	/* this is the default case */
-	for(r = 0; r < siz; r+= nc)/* we strongly rely on the fact that them images have the same size */
+
+	for(r = 0; r < siz; r+= nc)
 	{
 		for(c = 0; c < nc; c++)
 		{
 			//calc histogram
-			hist[(int) data.u8TempImage[GRAYSCALE]]++;
+			hist[(int) data.u8TempImage[GRAYSCALE][r+c]]++;
 		}
 	}
 
-	omega0 = omega1 = my0 = my1 = 0;
+
+	max_sigma = 0;
+
 	//calc otsu
 	for(k = 0; k < 256; k++){
+		omega0 = 0;
+		omega1 = 0;
+		my0 = 0;
+		my1 = 0;
 		for(i = 0; i <= k ; i++){
 			omega0 += hist[i];
 			my0 += hist[i] * i;
@@ -55,15 +60,17 @@ void ProcessFrame(uint8 *pInputImg)
 			my1 += hist[i] * i;
 		}
 
-		temp = (my0 / omega0 - my1 / omega1 ) * (my0 / omega0 - my1 / omega1 );
-		sigma = omega0 * omega1 * temp;
+		sigma = (my0 / omega0 - my1 / omega1 ) * (my0 / omega0 - my1 / omega1 );
+		sigma *= omega0 * omega1;
 
+		//set maximum to otsu_thres
 		if(sigma > max_sigma){
 			max_sigma = sigma;
-			//otsu_thres = k;
-			otsu_thres = (uint8) ((((uint16) k) *100)/255);
+			otsu_thres = k;
 		}
 	}
+
+
 
 	if(data.ipc.state.nStepCounter == 1)
 	{
@@ -80,10 +87,13 @@ void ProcessFrame(uint8 *pInputImg)
 			for(c = 0; c < nc; c++)
 			{
 				data.u8TempImage[THRESHOLD][r +c ] = data.u8TempImage[GRAYSCALE][r + c] > otsu_thres ? 0 : 0xFF;
-				//plot otsu_thres
+
+
+#if DEBUG		//plot otsu_thres in first row
 				data.u8TempImage[GRAYSCALE][otsu_thres] = 0;
 				data.u8TempImage[GRAYSCALE][otsu_thres+1] = 0xFF;
 				data.u8TempImage[GRAYSCALE][otsu_thres+2] = 0;
+#endif
 			}
 		}
 		/*
