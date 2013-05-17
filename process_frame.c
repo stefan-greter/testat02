@@ -43,6 +43,32 @@ void ProcessFrame(uint8 *pInputImg)
 	}
 
 
+	max_sigma = 0;
+
+	//calc otsu
+	for(k = 0; k < 256; k++){
+		omega0 = 0;
+		omega1 = 0;
+		my0 = 0;
+		my1 = 0;
+		for(i = 0; i <= k ; i++){
+			omega0 += hist[i];
+			my0 += hist[i] * i;
+		}
+		for(i = k+1 ; i < 256 ; i++){
+			omega1 += hist[i];
+			my1 += hist[i] * i;
+		}
+
+		sigma = (my0 / omega0 - my1 / omega1 ) * (my0 / omega0 - my1 / omega1 );
+		sigma *= omega0 * omega1;
+
+		//set maximum to otsu_thres
+		if(sigma > max_sigma){
+			max_sigma = sigma;
+			otsu_thres = k;
+		}
+	}
 
 
 	if(data.ipc.state.nStepCounter == 1)
